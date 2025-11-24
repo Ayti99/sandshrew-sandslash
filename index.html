@@ -1,0 +1,595 @@
+<!doctype html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8">
+    <title>Charizard! Beware Pokeballs! Get'Shiny!</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <script src = "game.js"></script>
+    <style>
+    @font-face {
+        font-family: 'Press Start 2P';
+        src: url('assets/fonts/PressStart2P-Regular.ttf') format('truetype');
+    }
+    body { margin: 0; }
+    </style>
+
+
+</head>
+<body>
+
+<script type="text/javascript">
+
+    var config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { y: 300 },
+                debug: false
+            }
+        },
+        scene: {
+            preload,
+            create,
+            update,
+        }
+    };
+
+    //Playability
+    var player;
+    var bombs;
+    var platforms;
+    var cursors;
+    var charms;
+
+    //Texts
+    var highScore = 0;
+    var score = 0;
+    var scoreText;
+    var highScoreText;
+
+    var gameOver = false;
+    var gameOverText;
+    var restartKey;
+
+    //---
+    let isJumping = false;
+    let isFalling = false;
+  
+    //Double Jump
+    let jumpCount = 0;
+    const maxJumps = 2;
+
+    //Game
+    new Phaser.Game(config);
+
+    function preload ()
+    {
+        //Background
+        this.load.image('pokemon_sky', 'assets/pokemon_skyi.png');
+
+        //Ground & platforms
+        this.load.image('ground_2', 'assets/platform_2i.png');
+        this.load.image('ground_1', 'assets/platform_1i.png');
+
+
+        //Pokeball (Bomb)
+        this.load.image('bomb', 'assets/pokeballi.png');
+        //Explosion
+        this.load.spritesheet('exploding', 'assets/explodingi.png', { frameWidth: 32 , frameHeight: 33 });
+
+        //Shiny Charm (Charm)
+        this.load.image('shiny_charm', 'assets/charm_gold.png');
+
+        //Charizard Shiny
+        this.load.spritesheet('charizard_shiny', 'assets/charizard_shinyi.png', { frameWidth: 53 , frameHeight: 50 });
+
+        //Charizard (Player)
+        this.load.spritesheet('charizard', 'assets/charizardi.png', { frameWidth: 53 , frameHeight: 50 });
+        
+        //Jump & Falling
+        this.load.spritesheet('charizard_jump', 'assets/charizard_jumpi.png', { frameWidth: 50 , frameHeight: 50 });
+        //Jump Left
+        this.load.spritesheet('charizard_jump_left', 'assets/charizard_jump_lefti.png', { frameWidth: 50 , frameHeight: 50 });
+        //Jump Right
+        this.load.spritesheet('charizard_jump_right', 'assets/charizard_jump_righti.png', { frameWidth: 50 , frameHeight: 50 });
+        
+        //Fall Left
+        this.load.spritesheet('charizard_fall_left', 'assets/charizard_fall_lefti.png', { frameWidth: 59 , frameHeight: 50 });
+        //Fall Right
+        this.load.spritesheet('charizard_fall_right', 'assets/charizard_fall_righti.png', { frameWidth: 59 , frameHeight: 50 });
+    }
+
+    function create ()
+    {
+
+        //Get Rid of Texts
+        if (scoreText) {
+            scoreText.destroy();
+        }
+
+        if (highScoreText) {
+            highScoreText.destroy();
+        }
+        
+        if (gameOverText) {
+            gameOverText.destroy();
+        }
+
+        //Background (has to be behind the texts duh)
+        this.add.image(400, 300, 'pokemon_sky');
+
+        //High Score
+        highScore = parseInt(localStorage.getItem('highScore')) || 0;
+        
+        highScoreText = this.add.text(40, 20, 'High Score: ' + highScore, {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '12px',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2.5
+        });
+
+        highScoreText.setShadow(2, 2, '#000000', 2, true, true);
+
+        //Score
+        score = 0;
+
+        scoreText = this.add.text(40, 55, 'Score: ' + score, {
+            fontFamily: '"Press Start 2P"',
+            fontSize: '12px',
+            fill: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2.5
+        });
+
+        scoreText.setShadow(2, 2, '#000000', 2, true, true);
+
+        //State Animations
+        createAnims.call(this);
+
+        //Platforms
+        platforms = this.physics.add.staticGroup();
+        platforms.create(400, 568, 'ground_1').refreshBody();
+        platforms.create(600, 400, 'ground_2');
+        platforms.create(50, 250, 'ground_2');
+        platforms.create(750, 220, 'ground_2');
+
+        //Charizard (Player)
+        player = this.physics.add.sprite(100, 450, 'charizard');
+        
+        player.setCollideWorldBounds(true);
+
+        player.anims.play('turn');
+        player.setVelocity(0, 0);
+
+        this.physics.add.collider(player, platforms);
+
+        cursors = this.input.keyboard.createCursorKeys();
+
+        //Shiny Charms (Charm)
+        charms = this.physics.add.group({
+            allowGravity: true,
+            bounceX: 0,
+            bounceY: 0.2,
+            collideWorldBounds: true
+        });
+
+        //Creating Shiny Charms (Charm)
+        for (let i = 0; i < 8; i++){
+            let charm = charms.create(100 + i * 80, 0, 'shiny_charm');
+            charm.setVelocity(Phaser.Math.Between(-50, 50), Phaser.Math.Between(50, 150));
+
+            charm.setVelocity(0, 0);
+        }
+        
+        this.physics.add.collider(charms, platforms);
+
+        //Collect Shiny Charms (Charm)
+        this.physics.add.overlap(
+            player, 
+            charms, 
+            collectCharms, 
+            null, 
+            this
+        );
+
+        //Pokeball (Bomb)
+        bombs = this.physics.add.group({
+            bounceX: 1,
+            bounceY: 1,
+            collideWorldBounds: true,
+            allowGravity: true
+        });
+
+        //Creating Pokeballs (Bombs)
+        for (let i = 0; i < 8; i++){
+            let bomb = bombs.create(100 + i * 80, 0, 'bomb');
+            bomb.setVelocity(Phaser.Math.Between(-20, 20), Phaser.Math.Between(20, 20));
+        }
+
+        this.physics.add.collider(bombs, platforms);
+        
+        //Explosion when touching Charizard (Player)
+        this.physics.add.overlap(
+            player,
+            bombs,
+            explodeBomb,
+            null,
+            this
+        );
+
+        //Collecting Shiny Charms (Charm)
+        function collectCharms(player, charm) {
+
+            console.log("+Shiny Charm!");
+            
+            // Remove Charm
+            charm.disableBody(true, true);
+            
+            // Increase Score (Up Up Up)
+            score += 10;
+            scoreText.setText('Score: ' + score);
+
+            //Score Shiny Effect
+            scoreText.setTintFill(0xffd700);
+            charm.scene.time.delayedCall(150, () => {
+                scoreText.clearTint();
+            });
+
+            //Charizard Shiny Effect
+            //player.setTexture('charizard_shiny');
+            //charm.scene.time.delayedCall(100000000, () => {
+                //player.setTexture('charizard');
+            //});
+
+            //Player Shiny Effect
+            player.setTintFill(0xffffaa);
+            charm.scene.time.delayedCall(150, () => {
+                player.clearTint();
+            });
+
+            // Updating High Score
+            if (score > highScore) {
+                highScore = score;
+                highScoreText.setText('High Score: ' + highScore);
+                
+                // Saving in Browse Memory
+                localStorage.setItem('highScore', highScore);
+            }
+        }
+
+    }
+
+    function update ()
+    {
+        if (gameOver) {
+            if (Phaser.Input.Keyboard.JustDown(restartKey)) {
+                gameOver = false;
+                this.scene.restart();
+            }
+            return;
+        }
+
+        if (!player || !player.body) return;
+
+        if (!cursors) return;
+        
+        const onGround = player.body.blocked.down || player.body.touching.down;
+
+        if (onGround) 
+        {
+            jumpCount = 0;
+            
+            //Left
+            if (cursors.left.isDown) 
+            {
+                player.setVelocityX(-180);
+                player.anims.play('left', true);
+            }
+            //Right
+            else if (cursors.right.isDown) 
+            {
+                player.setVelocityX(180);
+                player.anims.play('right', true);
+            }
+            //Turn
+            else 
+            {
+                player.setVelocityX(0);
+                player.anims.play('turn');
+            }
+            // Jump
+            if (Phaser.Input.Keyboard.JustDown(cursors.up)) 
+            {
+                player.setVelocityY(-360);
+                player.anims.play('jump');
+                jumpCount = 1; 
+            }
+            return;
+        }
+        
+        //Double Jump On Air
+        if (Phaser.Input.Keyboard.JustDown(cursors.up) && jumpCount < maxJumps)
+        {
+            player.setVelocityY(-360);
+            jumpCount++;
+                
+            if (player.body.velocity.x < 0) 
+            {
+                player.setVelocityX(-180);
+                player.anims.play('jump_left', true);
+            }
+            else if (cursors.right.isDown) 
+            {
+                player.setVelocityX(180);
+                player.anims.play('jump_right', true);
+            }
+            else 
+            {
+                if (!player.anims.isPlaying || player.anims.currentAnim?.key !== 'jump') 
+                {
+                    player.anims.play('jump', true);
+                }
+            }
+        }
+        
+        //Jump On Air
+        if (!onGround && player.body.velocity.y < 0) 
+        {
+            if (cursors.left.isDown) 
+            {
+                player.setVelocityX(-180);
+                player.anims.play('jump_left', true);
+            }
+            else if (cursors.right.isDown) 
+            {
+                player.setVelocityX(180);
+                player.anims.play('jump_right', true);
+            }
+            else 
+            { 
+                if (!player.anims.isPlaying || player.anims.currentAnim?.key !== 'jump') 
+                {
+                    player.anims.play('jump', true);
+                }
+            }
+        }
+            
+        //Falling
+        else if (!onGround && player.body.velocity.y > 0)
+        {
+            if (cursors.left.isDown) 
+            {
+                player.setVelocityX(-180);
+                player.anims.play('fall_left', true);
+            }
+            else if (cursors.right.isDown) 
+            {
+                player.setVelocityX(180);
+                player.anims.play('fall_right', true);
+            }
+            else 
+            {
+                if (!player.anims.isPlaying || player.anims.currentAnim?.key !== 'falling') 
+                {
+                    player.anims.play('falling', true);
+                }
+            }  
+        }
+    }
+
+    function createAnims ()
+    {
+
+        //Player (charizard)
+        this.anims.create({
+            key: 'left',
+            frames: this.anims.generateFrameNumbers('charizard', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'turn',
+            frames: [ { key: 'charizard', frame: 4 } ],
+            frameRate: 20
+        });
+
+        this.anims.create({
+            key: 'right',
+            frames: this.anims.generateFrameNumbers('charizard', { start: 6, end: 9 }),
+            frameRate: 10,
+            repeat: -1
+        });
+
+        //Jump
+        this.anims.create({
+            key: 'jump',
+            frames: this.anims.generateFrameNumbers('charizard_jump', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: 0
+        });
+        
+        //Jump left
+        this.anims.create({
+            key: 'jump_left',
+            frames: this.anims.generateFrameNumbers('charizard_jump_left', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        //Jump Right
+        this.anims.create({
+            key: 'jump_right',
+            frames: this.anims.generateFrameNumbers('charizard_jump_right', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        //Falling
+        this.anims.create({
+            key: 'falling',
+            frames: this.anims.generateFrameNumbers('charizard_jump', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        //Fall Left
+        this.anims.create({
+            key: 'fall_left',
+            frames: this.anims.generateFrameNumbers('charizard_fall_left', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        //Fall Right
+        this.anims.create({
+            key: 'fall_right',
+            frames: this.anims.generateFrameNumbers('charizard_fall_right', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        //Charizard Shiny
+        this.anims.create({
+            key: 'charizard_shiny',
+            frames: [ { key: 'charizard_shiny', frame: 2 } ],
+            frameRate: 20
+        });
+        
+
+        //Explosion
+        this.anims.create({
+            key: 'explode',
+            frames: this.anims.generateFrameNumbers('exploding', { start: 0, end: 8 }),
+            frameRate: 15,
+            repeat: 0
+        });
+        
+    }
+
+    function explodeBomb(player, bomb){
+
+        //Explosion
+        let boom = bomb.scene.add.sprite(bomb.x, bomb.y, 'exploding');
+        boom.play('explode');
+        
+        bomb.disableBody(true, true);
+        player.disableBody(true, true);
+        
+        //Game Over
+        bomb.scene.physics.pause();
+        boom.on('animationcomplete', () => {
+            console.log('explode animation complete — showing game over UI');
+            
+            gameOver = true;
+
+            // Dark overlay compatible with all Phaser versions
+            let darkBG = bomb.scene.add.graphics();
+            darkBG.fillStyle(0x000000, 0.6); // color + opacity
+            darkBG.fillRect(0, 0, 800, 600);
+            darkBG.setDepth(10);
+            //Text
+            gameOverText = bomb.scene.add.container(400, 300).setSize(400, 200);
+            gameOverText.setDepth(11);
+
+            //Game Over Txt
+            const titleText = bomb.scene.add.text(0, -60, 'GAME OVER', 
+            {
+                fontFamily: '"Press Start 2P"',
+                fontSize: '35px',
+                fill: '#ff0000', 
+                stroke: '#000000',
+                strokeThickness: 6,
+                align: 'center'
+            }).setOrigin(0.5);
+
+            //High Score Txt
+            const highScoreTextGO = bomb.scene.add.text(0, 0, `High Score: ${highScore}`, 
+            {
+                fontFamily: '"Press Start 2P"',
+                fontSize: '25px',
+                fill: '#ffffff', 
+                stroke: '#000000',
+                strokeThickness: 5,
+                align: 'center'
+            }).setOrigin(0.5);
+
+            //Score Txt
+            const scoreTextGO = bomb.scene.add.text(0, 40, `Score: ${score}`, 
+            {
+                fontFamily: '"Press Start 2P"',
+                fontSize: '25px',
+                fill: '#ffffff', 
+                stroke: '#000000',
+                strokeThickness: 5,
+                align: 'center'
+            }).setOrigin(0.5);
+
+            //Space Bar Txt
+            const instructionsText = bomb.scene.add.text(0, 80, 'Press SPACE To Retry', 
+            {
+                fontFamily: '"Press Start 2P"',
+                fontSize: '25px',
+                fill: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 5,
+                align: 'center'
+            }).setOrigin(0.5);
+
+            instructionsText.setDepth(12);
+
+            gameOverText.add([titleText, highScoreTextGO, scoreTextGO, instructionsText]);
+
+            // Shiny Effect4 Score Txt
+            let shineSteps = 6;         
+            let stepTime = 120;        
+            let currentStep = 0;
+            
+            let shineEvent = bomb.scene.time.addEvent({
+                delay: stepTime,
+                repeat: shineSteps - 1,
+                callback: () => {
+                    if (currentStep % 2 === 0)
+                    {
+                        scoreTextGO.setTintFill(0xffd700);  
+                    } 
+                    else 
+                    {
+                        scoreTextGO.clearTint();            
+                    }
+                    currentStep++;
+                    
+                    //Clear Effect
+                    if (currentStep > shineSteps) {
+                        scoreTextGO.clearTint();
+                    }
+                }
+            });
+
+
+            //HeartBeat Effect4 Press SPACE To Retry Txt
+            bomb.scene.tweens.add({
+                targets: instructionsText,
+                scaleX: 1.08,
+                scaleY: 1.08,
+                duration: 450,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+
+            //Try Again with Space Bar
+            restartKey = bomb.scene.input.keyboard.addKey(
+                Phaser.Input.Keyboard.KeyCodes.SPACE
+            );
+        });
+    }
+
+</script>
+
+</body>
+</html>
