@@ -2,4 +2,4 @@
 
 My Phaser Mini-Game 1.0
 
-[![](assets/game_cover.png)](https://github.com/Ayti99/sandshrew-sandslash)
+[![](assets/game_cover.png)](https://ayti99.github.io/sandshrew-sandslash/)
